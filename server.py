@@ -104,8 +104,8 @@ def init_blip():
             _models["blip_model"] = None
             return None, None
         try:
-            _models["blip_processor"] = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-            _models["blip_model"] = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
+            _models["blip_processor"] = BlipProcessor.from_pretrained("./vlms/final_model")
+            _models["blip_model"] = BlipForConditionalGeneration.from_pretrained("./vlms/final_model")
             _models["blip_model"].eval()
         except Exception:
             _models["blip_processor"] = None
@@ -119,8 +119,8 @@ def init_traffic_blip():
             _models["traffic_blip_model"] = None
             return None, None
         try:
-            _models["traffic_blip_processor"] = AutoProcessor.from_pretrained("Charansaiponnada/blip-traffic-rr")
-            _models["traffic_blip_model"] = AutoModelForVision2Seq.from_pretrained("Charansaiponnada/blip-traffic-rr")
+            _models["traffic_blip_processor"] = AutoProcessor.from_pretrained("./final_model")
+            _models["traffic_blip_model"] = AutoModelForVision2Seq.from_pretrained("./final_model")
             _models["traffic_blip_model"].eval()
         except Exception:
             _models["traffic_blip_processor"] = None

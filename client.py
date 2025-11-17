@@ -52,14 +52,14 @@ def user_pressed_d() -> bool:
             key = ch.decode('utf-8')
         except Exception:
             return False
-        return key.lower() == 'd'
+        return key.lower() == 'd' 
     return False
 
 
 def main():
     folder_path = "temp/images"
     photo_path = os.path.join(folder_path, "latest.jpg")
-    server_base = "http://specsserver.local"  # base URL
+    server_base = "http://192.168.29.45:80"  # base URL
     caption_endpoint = "/caption/en"
     ocr_endpoint = "/traffic"
 

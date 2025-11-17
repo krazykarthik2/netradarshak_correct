@@ -19,7 +19,11 @@ is available it will not be used; this script relies on keyboard input only.
 import os
 import sys
 import time
-import threading
+import select
+try:
+    import msvcrt
+except Exception:
+    msvcrt = None
 import select
 try:
     import msvcrt
@@ -40,53 +44,32 @@ except Exception:
     gTTS = None
     playsound = None
 
+# Prefer espeak-ng Python bindings if available
+try:
+    from espeakng import ESpeakNG
+    _esng = ESpeakNG()
+except Exception:
+    _esng = None
+
 
 def speak(text: str):
     if not text:
         return
-    # Prefer espeak (synchronous). This blocks until speech completes.
+    # Prefer espeak-ng Python bindings (blocking, in-process)
     try:
-        subprocess.run(['espeak', text], check=True)
-        return
-    except Exception:
-        pass
-
-    # Fallback to gTTS+playsound (also synchronous)
-    try:
-        if gTTS is not None and playsound is not None:
-            tts = gTTS(text=text, lang='en')
-            fd, path = tempfile.mkstemp(suffix='.mp3')
-            os.close(fd)
-            try:
-                tts.save(path)
-                # Try to play with an external player (blocking) if available
-                player = None
-                for cmd in ('mpg123', 'mpv', 'omxplayer', 'ffplay'):
-                    if shutil.which(cmd):
-                        player = cmd
-                        break
-                if player:
-                    if player == 'omxplayer':
-                        subprocess.run([player, path, '-o', 'local'], check=False)
-                    elif player == 'ffplay':
-                        subprocess.run([player, '-nodisp', '-autoexit', '-loglevel', 'quiet', path], check=False)
-                    else:
-                        subprocess.run([player, path], check=False)
-                else:
-                    # playsound typically blocks; use it as last resort
-                    playsound(path)
-            finally:
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
+        if _esng is not None:
+            _esng.say(text)
             return
     except Exception:
         pass
 
-    # Last resort: print the text
-    print(text)
-
+    # Fallback to espeak subprocess (synchronous)
+    try:
+        subprocess.run(['espeak', text],  check=True)
+        print("reverting to espeak subprocess")
+        return
+    except Exception:
+        pass
 
 class SerialClient:
     def __init__(self, server_base: str, camera_index=0):
@@ -131,8 +114,12 @@ class SerialClient:
         url = self.server_base + self.current_endpoint
         ok = self.take_photo()
         if not ok:
-            print('Failed to capture')
-            return
+            print('Failed to capture (fatal). Exiting so supervisor can restart.')
+            try:
+                self.close()
+            except Exception:
+                pass
+            os._exit(1)
         try:
             # Keep the file open while requests reads it by posting inside the with-block
             with open(self.photo_path, 'rb') as f:

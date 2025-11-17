@@ -1,0 +1,2 @@
+ssh specs@raspberrypi.local
+
