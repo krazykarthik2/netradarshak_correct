@@ -7,7 +7,7 @@ Usage:
   python webcam_caption.py --model_dir ./ --auto
 
 Controls:
-  SPACE - capture a frame and send to model
+  c     - capture a frame and send to model (saves to temp/images, opens in Chrome)
   q     - quit
 
 This script attempts to load a HF-style vision->text pipeline from the provided
@@ -16,9 +16,14 @@ HTTP server at http://localhost:8000/predict. Adjust as needed for your setup.
 """
 import argparse
 import io
+import select
 import sys
 import time
+import subprocess
+import os
 from pathlib import Path
+
+import numpy as np
 
 try:
     import cv2
@@ -32,6 +37,32 @@ def pil_from_bgr(bgr_frame):
     # Convert BGR (OpenCV) to RGB and create PIL image
     rgb = cv2.cvtColor(bgr_frame, cv2.COLOR_BGR2RGB)
     return Image.fromarray(rgb)
+
+def save_frame_and_open_chrome(bgr_frame, output_dir='temp/images'):
+    """Save frame to temp/images folder and open in Chrome."""
+    # Create output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Generate filename with timestamp
+    timestamp = time.strftime('%Y%m%d_%H%M%S')
+    filename = os.path.join(output_dir, f'frame_{timestamp}.jpg')
+    
+    # Save frame
+    success = cv2.imwrite(filename, bgr_frame)
+    
+    if success:
+        print(f"Frame saved to: {filename}")
+        # Open in Chrome
+        try:
+            abs_path = os.path.abspath(filename)
+            subprocess.Popen(['chrome', abs_path])
+            print(f"Opened in Chrome: {abs_path}")
+        except Exception as e:
+            print(f"Could not open in Chrome: {e}")
+        return filename
+    else:
+        print("Failed to save frame")
+        return None
 
 def try_load_transformers(model_dir, device):
     """Try to load HF-compatible vision-to-text model from model_dir.
@@ -118,7 +149,7 @@ def main():
     parser.add_argument('--auto', action='store_true', help='Auto-capture frames every N seconds')
     parser.add_argument('--interval', type=float, default=3.0, help='Interval seconds for auto mode')
     parser.add_argument('--device', choices=['cpu','cuda'], default='cpu', help='Device to run model on')
-    parser.add_argument('--http_url', default='http://localhost:8000/predict', help='Fallback HTTP endpoint for captioning')
+    parser.add_argument('--http_url', default='http://localhost:80/caption/en', help='Fallback HTTP endpoint for captioning')
     parser.add_argument('--max_captures', type=int, default=0, help='Stop after this many captures (0 = unlimited)')
     args = parser.parse_args()
 
@@ -134,8 +165,6 @@ def main():
         print("Could not open webcam. If you're on Windows, ensure camera access permission is enabled.")
         sys.exit(1)
 
-    print("Press SPACE to capture, 'q' to quit. In --auto mode the script captures every --interval seconds.")
-
     last_auto = 0.0
     captures_done = 0
     try:
@@ -145,22 +174,33 @@ def main():
                 print('Failed to read frame from webcam')
                 break
 
-            # show small preview window
-            cv2.imshow('webcam (press q to quit)', frame)
-
             now = time.time()
             do_capture = False
             if args.auto and (now - last_auto) >= args.interval:
                 do_capture = True
                 last_auto = now
 
-            key = cv2.waitKey(1) & 0xFF
+            # Non-blocking keyboard input
+            key = -1
+            if sys.stdin in select.select([sys.stdin], [], [], 0)[0]:
+                try:
+                    user_input = sys.stdin.read(1).lower()
+                    if user_input == 'q':
+                        key = ord('q')
+                    elif user_input == 'c':
+                        key = ord('c')
+                except Exception:
+                    pass
+            
             if key == ord('q'):
                 break
-            if key == 32:  # space
+            if key == ord('c'):
                 do_capture = True
 
             if do_capture:
+                # Save frame and open in Chrome
+                save_frame_and_open_chrome(frame)
+                
                 pil = pil_from_bgr(frame)
                 print('\nCaptured frame, sending to model...')
                 start = time.time()
@@ -175,7 +215,7 @@ def main():
 
     finally:
         cap.release()
-        cv2.destroyAllWindows()
+        print("Webcam closed.")
 
 if __name__ == '__main__':
     main()
